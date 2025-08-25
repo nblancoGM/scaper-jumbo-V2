@@ -32,12 +32,11 @@ jobs:
           GSPREAD_CREDENTIALS: ${{ secrets.GSPREAD_CREDENTIALS }}
         run: python main.py
 
-      # --- ¡NUEVO PASO IMPORTANTE AQUÍ! ---
-      # Sube cualquier archivo .png (nuestras capturas) como un artefacto.
-      # Este paso se ejecutará siempre, incluso si el paso anterior falla.
+      # --- ¡VERSIÓN ACTUALIZADA AQUÍ! ---
+      # Cambiamos v3 a v4
       - name: Upload error screenshots
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: error-screenshots
           path: ./*.png
