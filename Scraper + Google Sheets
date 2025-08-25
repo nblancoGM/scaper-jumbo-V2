@@ -67,9 +67,9 @@ def main():
 
     # 2. ABRIR LA HOJA DE CÁLCULO
     # Reemplaza 'NombreDeTuHojaDeCalculo' con el nombre exacto de tu archivo en Google Drive.
-    spreadsheet = gc.open("NombreDeTuHojaDeCalculo") 
+    spreadsheet = gc.open("Precios GM") 
     # Puedes usar el nombre de la pestaña, ej: "Precios" o "Hoja 1"
-    worksheet = spreadsheet.worksheet("Hoja 1") 
+    worksheet = spreadsheet.worksheet("Jumbo-info") 
     print(f"Abierta la hoja de cálculo '{spreadsheet.title}' y la pestaña '{worksheet.title}'.")
 
     # 3. LEER LOS DATOS Y PROCESARLOS
