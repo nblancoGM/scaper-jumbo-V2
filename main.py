@@ -13,7 +13,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-# --- NO TOCAR: ESTA FUNCIÓN DE SCRAPING FUNCIONA PERFECTAMENTE ---
+# --- FUNCIÓN DE SCRAPING CON REINTENTOS ---
 def obtener_precio_por_kilo(url_producto, index):
     print(f"--- Iniciando scraping para: {url_producto} ---")
     options = webdriver.ChromeOptions()
@@ -24,6 +24,7 @@ def obtener_precio_por_kilo(url_producto, index):
     options.add_argument("window-size=1280,800")
 
     driver = None
+    # Bucle de reintentos (hasta 3 intentos)
     for intento in range(1, 4):
         try:
             print(f"   -> Intento #{intento}...")
@@ -33,11 +34,12 @@ def obtener_precio_por_kilo(url_producto, index):
             
             driver.get(url_producto)
             
-            wait = WebDriverWait(driver, 20)
+            wait = WebDriverWait(driver, 20) # 20 segundos de espera por intento
             precio_element = wait.until(
                 EC.visibility_of_element_located((By.XPATH, "//span[contains(text(), 'x kg')]"))
             )
             
+            # Si llegamos aquí, encontramos el precio
             texto_precio = precio_element.text
             match = re.search(r'\((.*?)\)', texto_precio)
             if match:
@@ -50,38 +52,39 @@ def obtener_precio_por_kilo(url_producto, index):
                         driver.quit()
                     return precio_final
             
+            # Si algo raro pasa (ej. el elemento existe pero no tiene el formato esperado)
             print("   -> Elemento encontrado pero formato de precio incorrecto.")
-            break 
+            break # Salimos del bucle si el formato es raro
 
         except TimeoutException:
             print("   -> Timeout. El elemento del precio no apareció.")
             try:
+                # Si falla, buscamos el botón "REINTENTAR"
                 reintentar_button = driver.find_element(By.XPATH, "//button[contains(text(), 'REINTENTAR')]")
                 print("   -> Botón 'REINTENTAR' encontrado. Haciendo clic y esperando...")
                 reintentar_button.click()
-                time.sleep(5) 
+                time.sleep(5) # Esperamos 5 segundos después de hacer clic
             except NoSuchElementException:
                 print("   -> No se encontró el botón 'REINTENTAR'. Rindiéndose para esta URL.")
-                break 
+                break # Salimos del bucle si no hay botón de reintento
         
         except Exception as e:
             print(f"   -> ERROR inesperado en el intento #{intento}: {e}")
-            time.sleep(5)
+            time.sleep(5) # Pausa antes del siguiente intento
 
+    # Si salimos del bucle sin éxito
     print(f"   -> No se pudo obtener el precio para {url_producto} después de 3 intentos.")
     if driver:
-        # Ya no guardamos capturas porque el proceso funciona, pero lo dejamos por si acaso.
-        # screenshot_path = f"error_screenshot_{index}.png"
-        # driver.save_screenshot(screenshot_path)
-        # print(f"   -> Captura de pantalla final guardada en: {screenshot_path}")
+        screenshot_path = f"error_screenshot_{index}.png"
+        driver.save_screenshot(screenshot_path)
+        print(f"   -> Captura de pantalla final guardada en: {screenshot_path}")
         driver.quit()
     return None
 
-# --- FUNCIÓN PRINCIPAL MODIFICADA ---
+# --- FUNCIÓN PRINCIPAL (SIN CAMBIOS) ---
 def main():
     print("Iniciando el proceso de actualización de precios...")
     
-    # 1. AUTENTICACIÓN (Sin cambios)
     if 'GSPREAD_CREDENTIALS' in os.environ:
         creds_json = json.loads(os.environ['GSPREAD_CREDENTIALS'])
         gc = gspread.service_account_from_dict(creds_json)
@@ -90,68 +93,33 @@ def main():
         gc = gspread.service_account(filename='credentials.json')
         print("Autenticado con Google Sheets usando el archivo local 'credentials.json'.")
 
-    # 2. ABRIR AMBAS HOJAS DE CÁLCULO
     spreadsheet = gc.open("Precios GM") 
-    worksheet_origen = spreadsheet.worksheet("Jumbo-info") 
-    worksheet_destino = spreadsheet.worksheet("P-web")
-    print(f"Abiertas las hojas '{worksheet_origen.title}' (origen) y '{worksheet_destino.title}' (destino).")
+    worksheet = spreadsheet.worksheet("Jumbo-info") 
+    print(f"Abierta la hoja de cálculo '{spreadsheet.title}' y la pestaña '{worksheet.title}'.")
 
-    # 3. LEER LOS DATOS DE AMBAS HOJAS
-    df_origen = pd.DataFrame(worksheet_origen.get_all_records())
-    df_destino = pd.DataFrame(worksheet_destino.get_all_records())
+    df = pd.DataFrame(worksheet.get_all_records())
     
-    # Asegurarse que las columnas necesarias existan
-    if 'URL' not in df_origen.columns or 'SKU' not in df_origen.columns:
-        print("ERROR: La hoja 'Jumbo-info' debe tener las columnas 'URL' y 'SKU'.")
-        return
-    if 'SKU' not in df_destino.columns or 'Jumbo Kg' not in df_destino.columns:
-        print("ERROR: La hoja 'P-web' debe tener las columnas 'SKU' y 'Jumbo Kg'.")
+    if 'URL' not in df.columns:
+        print("ERROR: La hoja de cálculo debe tener una columna llamada 'URL'.")
         return
 
-    # 4. PROCESAR, SCRAPEAR Y PREPARAR LA ACTUALIZACIÓN
-    updates_count = 0
-    for index, row_origen in df_origen.iterrows():
-        url = str(row_origen['URL'])
-        sku = row_origen['SKU']
-        
-        if url and sku: # Solo procesar si URL y SKU no están vacíos
+    for index, row in df.iterrows():
+        url = row['URL']
+        if url:
             precio = obtener_precio_por_kilo(url, index)
-            
-            # Buscar el SKU en la hoja de destino
-            # Usamos .loc para encontrar la fila donde el SKU coincida
-            filas_destino = df_destino.loc[df_destino['SKU'] == sku]
-            
-            if not filas_destino.empty:
-                # Obtenemos el índice de la primera fila que coincida
-                indice_destino = filas_destino.index[0]
-                
-                # Actualizamos el DataFrame de destino con el nuevo precio
-                if precio is not None:
-                    df_destino.loc[indice_destino, 'Jumbo Kg'] = precio
-                    updates_count += 1
-                else:
-                    df_destino.loc[indice_destino, 'Jumbo Kg'] = "ERROR"
-                
-                # También actualizamos la fecha en la hoja de origen
-                df_origen.loc[index, 'Ultima Actualizacion'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
+            if precio is not None:
+                df.loc[index, 'Precio x KG'] = precio
+                df.loc[index, 'Ultima Actualizacion'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             else:
-                print(f"   -> ADVERTENCIA: No se encontró el SKU {sku} en la hoja 'P-web'.")
-
+                df.loc[index, 'Precio x KG'] = "ERROR"
+                df.loc[index, 'Ultima Actualizacion'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
             time.sleep(2) 
 
-    # 5. ACTUALIZAR AMBAS HOJAS DE CÁLCULO
-    if updates_count > 0:
-        print(f"Proceso de scraping finalizado. Se actualizarán {updates_count} precios.")
-        print("Actualizando la hoja 'P-web'...")
-        worksheet_destino.clear()
-        worksheet_destino.update([df_destino.columns.values.tolist()] + df_destino.fillna('').values.tolist())
-        print("Actualizando la hoja 'Jumbo-info' con las fechas...")
-        worksheet_origen.clear()
-        worksheet_origen.update([df_origen.columns.values.tolist()] + df_origen.fillna('').values.tolist())
-        print("¡Hojas de cálculo actualizadas con éxito!")
-    else:
-        print("Proceso finalizado. No se encontraron precios para actualizar.")
+    print("Proceso de scraping finalizado. Actualizando la hoja de cálculo...")
+    worksheet.clear()
+    worksheet.update([df.columns.values.tolist()] + df.values.tolist())
+    print("¡Hoja de cálculo actualizada con éxito!")
 
 if __name__ == '__main__':
     main()
