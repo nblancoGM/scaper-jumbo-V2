@@ -1,10 +1,8 @@
 name: Jumbo Price Scraper
 
 on:
-  # Esto hace que el script se ejecute todos los lunes a las 12:00 UTC (8:00 AM en Chile).
   schedule:
     - cron: '0 12 * * 1'
-  # Esto te permite ejecutarlo manualmente desde la pestaña "Actions" en GitHub.
   workflow_dispatch:
 
 jobs:
@@ -12,31 +10,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Clona tu repositorio para tener acceso al script.
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. Configura el entorno de Python.
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      # 3. Instala Google Chrome en el runner de GitHub.
       - name: Install Google Chrome
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      # 4. Instala todas las librerías de Python necesarias.
       - name: Install Python dependencies
         run: |
           pip install selenium webdriver-manager gspread google-auth-oauthlib pandas
 
-      # 5. Ejecuta el script.
       - name: Run Scraper
-        # Le pasa el secreto que guardamos a una variable de entorno
-        # para que el script de Python pueda leerlo.
         env:
           GSPREAD_CREDENTIALS: ${{ secrets.GSPREAD_CREDENTIALS }}
-        run: python main.py # Asegúrate que tu script se llame 'main.py'
+        run: python main.py
+
+      # --- ¡NUEVO PASO IMPORTANTE AQUÍ! ---
+      # Sube cualquier archivo .png (nuestras capturas) como un artefacto.
+      # Este paso se ejecutará siempre, incluso si el paso anterior falla.
+      - name: Upload error screenshots
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: error-screenshots
+          path: ./*.png
