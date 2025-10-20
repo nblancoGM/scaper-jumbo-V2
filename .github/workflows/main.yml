@@ -2,13 +2,13 @@ name: Jumbo Price Scraper
 
 on:
   schedule:
+    # Corre todos los lunes a las 12:00 (UTC)
     - cron: '0 12 * * 1'
   workflow_dispatch:
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -25,15 +25,16 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install selenium webdriver-manager gspread google-auth-oauthlib pandas
+          pip install --upgrade pip
+          pip install selenium gspread google-auth-oauthlib pandas undetected-chromedriver
 
       - name: Run Scraper
         env:
           GSPREAD_CREDENTIALS: ${{ secrets.GSPREAD_CREDENTIALS }}
+        # Ejecutamos la versión actualizada del script. Ajusta el nombre
+        # del archivo si lo renombraste en el repositorio.
         run: python main.py
 
-      # --- ¡VERSIÓN ACTUALIZADA AQUÍ! ---
-      # Cambiamos v3 a v4
       - name: Upload error screenshots
         if: always()
         uses: actions/upload-artifact@v4
