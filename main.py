@@ -56,10 +56,12 @@ from datetime import datetime
 def obtener_precio_por_kilo(url_producto: str) -> int | None:
     """Obtiene el precio por kilo de un producto de Jumbo usando ScrapingAnt.
 
-    Esta función construye una URL de la API de ScrapingAnt con el parámetro
-    ``browser=true`` para que se ejecute el JavaScript de la página. Luego
-    analiza el HTML resultante para encontrar el elemento ``<span>`` que
-    contiene "x kg" y extrae el valor numérico dentro de paréntesis.
+    Esta función construye una solicitud a la API de ScrapingAnt para recuperar
+    el HTML renderizado de la página de producto de Jumbo. Utiliza ``browser=true``
+    para ejecutar JavaScript y ``wait_for`` para dar tiempo al cargado de
+    contenido dinámico. Luego analiza el HTML para extraer el texto
+    que contiene "x kg" y, a partir de ahí, el valor numérico dentro de
+    paréntesis.
 
     Args:
         url_producto: URL del producto de Jumbo.
@@ -74,29 +76,28 @@ def obtener_precio_por_kilo(url_producto: str) -> int | None:
             "La variable de entorno SCRAPINGANT_API_KEY no está definida."
         )
 
-    # Preparar la URL codificada y la URL completa de ScrapingAnt
-    encoded_url = urllib.parse.quote(url_producto, safe="")
-    api_url = (
-        f"https://api.scrapingant.com/v2/general?x-api-key={api_key}"  # clave
-        f"&url={encoded_url}&browser=true"
-    )
+    base_api = "https://api.scrapingant.com/v2/general"
 
-    # Realizamos hasta 3 intentos para manejar posibles fallos transitorios.
     for intento in range(1, 4):
         try:
             print(f"   -> Intento #{intento} para {url_producto}...")
-            response = requests.get(api_url, timeout=60)
-            if response.status_code != 200:
+            params = {
+                "x-api-key": api_key,
+                "url": url_producto,
+                "browser": "true",
+                "wait_for": "5000",
+            }
+            response = requests.get(base_api, params=params, timeout=60)
+            status = response.status_code
+            if status != 200:
                 print(
-                    f"   -> La API respondió con status {response.status_code}. "
+                    f"   -> La API respondió con status {status}. "
                     "Reintentando en 5 segundos..."
                 )
                 time.sleep(5)
                 continue
             html = response.text
             soup = BeautifulSoup(html, "html.parser")
-            # Buscamos un span que contenga "x kg". Utilizamos .text para
-            # asegurarnos de que el texto contenga exactamente la cadena.
             span = soup.find(
                 "span",
                 string=lambda t: isinstance(t, str) and "x kg" in t,
@@ -104,7 +105,6 @@ def obtener_precio_por_kilo(url_producto: str) -> int | None:
             if span:
                 match = re.search(r"\(([^\)]*)\)", span.text)
                 if match:
-                    # Extrae todos los dígitos para formar el precio final.
                     numeros = re.findall(r"\d+", match.group(1))
                     if numeros:
                         precio_final = int("".join(numeros))
