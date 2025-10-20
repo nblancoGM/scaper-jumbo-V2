@@ -1,9 +1,10 @@
 name: Jumbo Price Scraper
 
 on:
+  # Programa la ejecución todos los lunes a las 12:00 UTC. Ajusta según necesidad.
   schedule:
-    # Corre todos los lunes a las 12:00 (UTC)
     - cron: '0 12 * * 1'
+  # Permite ejecutar manualmente desde la interfaz de GitHub.
   workflow_dispatch:
 
 jobs:
@@ -18,26 +19,16 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Google Chrome
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install selenium gspread google-auth-oauthlib pandas undetected-chromedriver
+          # Instalamos las dependencias necesarias para el scraper
+          pip install requests beautifulsoup4 gspread google-auth-oauthlib pandas
 
       - name: Run Scraper
         env:
+          # Credenciales para Google Sheets
           GSPREAD_CREDENTIALS: ${{ secrets.GSPREAD_CREDENTIALS }}
-        # Ejecutamos la versión actualizada del script. Ajusta el nombre
-        # del archivo si lo renombraste en el repositorio.
+          # Clave de la API de ScrapingAnt definida en los secretos del repositorio
+          SCRAPINGANT_API_KEY: ${{ secrets.SCRAPINGANT_API_KEY }}
         run: python main.py
-
-      - name: Upload error screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: error-screenshots
-          path: ./*.png
